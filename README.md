@@ -1,2 +1,2 @@
 # NBA-position-modeling
-The Development of Models to Predict Which Position a Basketball Player is Best Suited For
+This project is in response to the following question: 'Can basketball be a positionless sport?'. In this project, web scraping techniques were utilized to collect and compile roughly 20 seasons of NBA player data and conduct an exploratory data analysis to determine if there is a relationship between player performance and which position they play. From here, three multinomial classification models were built utilizing 3 different recipes to develop a model that can predict which position a player would be best suited for, given their season performance.
