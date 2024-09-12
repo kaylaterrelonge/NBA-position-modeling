@@ -1,0 +1,237 @@
+---
+title: "Decoding The Relationship Between Position and Performance"
+subtitle: | 
+  | Predicting An NBA Player's Position Based on Performance Statistics
+  | Final Project 
+  | Foundations of Data Science with R (STAT 359) 
+author: "Kayla Terrelonge"
+date: today
+
+format:
+  html:
+    toc: true
+    embed-resources: true
+    
+execute:
+  echo: false
+  warning: false
+
+from: markdown+emoji 
+reference-location: margin
+citation-location: margin
+---
+
+```{r}
+#| label: pkgs-data
+## load-pkgs ----
+library(tidyverse)
+library(tidymodels)
+
+## load data & info ----
+load("model_prep/split_data.rda")
+load("results/tuned_knn.rda")
+load("results/tuned_mreg.rda")
+load("results/tuned_rf.rda")
+load("results/final_wkflw.rda")
+```
+
+## GitHub Link
+
+To find all relavant code for this project, click [here](https://github.com/STAT359-2024SU/359-final-project-kaylaterrelonge).
+
+## Introduction
+
+When thinking of the game of basketball, many analysts, coach, and even enthusiasts focus on points in classifying and ranking the abilities of a player. While this logic makes sense, as winning is a main measure of success in competitive sports and in basketball points are essential in winning, it in turn also introduces the question of "How does player position influence the player performance in terms of average scoring trends?". Because every position is different and rely on players ability outside of their shooting skills, it is necessary to understand where players are positioned and figure out a way to assign positions that highlights the strengths of the player on the court.This method of thinking led to the development of this project, which has the objective of developing a model that can predict where a player should be positioned based on their average performance for a given season.
+
+This project was created with scouts and coaches in mind, as a way to help incoming players find their footing on the court, without having to sacrifice a portion of the season discovering their position. In addition to this, this project would be beneficial to coaches during the trading season because it could allow them to determine what players would be the best fit for their team based on their season performance and historical performance.
+
+The data for this model and was complied from ESPN's NBA statistics site. ESPN collects major league American sports data for all athletes that appear in 70% of games. During the regular season the data is updated after each game, therefore, the most current season's data is not included in the model building process for this particular project.
+
+## Data Overview
+
+After aggregating the data from each season into one structure, the data set had nearly eleven thousand observations and twenty-two variables. As a brief introduction to the data set, the outcome variable for this project was the player position. There were roughly 4 identification variables for each player, including their name, team, rank. There was one time indicator variable, the season that the data was recorded for The remainder of the variables were predictor variables and they were averaged for the entire regular season.
+
+Moving on to the inspection of the data itself, there were no issues with missingness, as only two variables were missing information. However, as discovered later on, some of the data entry inserted `NA` values for missing values, which introduced issues that will be discussed later in the report. As for outcome variable of position, there was a class imbalance. During the initial handling of the raw data, it appeared that the categorical variable of player position, which was handled as a factor variable, had 9 levels. However, from the figure below, we see that two of these levels have very few observations. Because of this, observations with those values for player position were filtered out.
+
+![Target Variable Inspection](figures/target_var.png){#fig-targinspect}
+
+## Explorations
+
+### Understanding Positional Trends
+
+Now that there is a general understanding of what the dataset contains, it may seem intuitive to assume that certain positions performed better in certain realms of the court, in comparison to others. For example, shooting guards are supposed to score points and steal the ball, thus one may assume that they should have a higher number of average points. However, the figure below, while it seems relatively informative, it is important in generating an understanding that becomes apparent throughout this project; on-the-court strengths are dependent on the player, regardless of their position. It becomes clear that no one position is good at one particular aspect of the game, which can be seen in @fig-uninformed. This plot does not yield any information, but it is important to include to help with the understanding that there are no trends within this project that are beneficial and apparent enough to be generally applied to one particular position.
+
+![Understanding There is No Understanding](figures/point_fg_pos.png){#fig-uninformed}
+
+### Understanding the Offensive Demands of Positions
+
+Since it is evident there are no overarching trends surrounding player position and their performance via scoring, a more general approach of exploring offensive and defensive trends was implemented. In the case of this project, offensive behaviors were all statistics surrounding scoring points, like free-throws or field-goals. In addition to this, the average percentage was used instead of the number of shots made, as this is a more accurate representation of the scoring capabilities of the particular player.
+
+Moving on to looking at the field goal percentage in relation to player positions. Field goals are shots taken by a player that are not on the free-throw line or the three-point line. As seen in @fig-fg-pos, the typical mean field-goal percentage is between forty to fifty percent. However, there were two positions that had higher averages, those being the center and power forward positions. When looking at the role of both positions, they are both responsible for making shots, more specifically the power forward, who has to be crafty with their shots because they are often not the target of defensive plays. When taking this into account, this could explain the lower interquartile range for the power forward in comparison to the center. Power forwards must routinely perform well at shooting and taking safe shots, which would lead to more logical thinking when determining if the shot is worth the risk.
+
+![](figures/fg_pos_dist.png){#fig-fg-pos}
+
+As for the distribution of the average three-point percentages per position, a unique trend was observed, as the center and power forward positions had the largest interquartile range and 50% of their data was between zero and thirty percent. The forward position had a larger interquartile range as well. As mentioned above the center and power forward positions are not explicit scoring position, but instead strategic scoring roles, which is a similar description for the forward, which is responsible for rebounding and defending larger player. This could explain the larger interquartile range because most players in these roles are not likely to be in positions to strategically make three-pointer shots. The shooting guard, who is responsible for ball handling and shooting had the highest mean, however it was close with the guard, point guard, and shooting forward roles, and this is to be expected as their job is based on shooting the ball, regardless of location on the court or defensive threats. These trends can be observed further in @fig-3pm-pos.
+
+![](figures/3p_pos_dist.png){#fig-3pm-pos}
+
+When looking at the free throw distribution per position, as seen in @fig-ftm-pos, there is a significantly higher average free throw percentage among all roles. This can be contributed to the fact that free throws are in controlled environments, with no defensive threats and the players have an open shot arguably. However, the similar trend that was observed with the center and power forward positions in their average three pointer percentage was seen here as well. These positions had the lowest averages in comparison to the other postions and the largest interquartile ranges, this trend could be explained using the reasoning described above. The point guard and guard positions had the highest averages and smallest interquartile ranges in comparison to other positions, which is expected as free-throws are given to players who have been fouled on the court. Since these positions are more likely to handle the ball, guards are directly responsible for dribbling and moving the ball, they are more likely to be victims of aggressive defense allowing for opportunties to be fouled, which would result in more free-throw opportunities.
+
+![](figures/ft_pos_dist.png){#fig-ftm-pos} 
+
+### Understanding the Defensive Demands of Positions
+
+When looking at the defensive measure of blocks visualized in @fig-blk-dist, we see that point guards, guards, and shooting guards have a higher density between 0 and 1, in comparison to the other positions. This can be explained by the fact that, all guards, regardless of the type of guard, is responsible for guarding offensive players who have the ball. Therefore, these positions having a higher number of blocks makes sense, because they are more responsible for ensuring that scoring does not occur, which one of the prevention methods is blocking.
+
+![](figures/point_blks_dist.png){#fig-blk-dist}
+
+When looking at @fig-asst-dist, forwards, power forwards, and centers all have higher densities for their average assists, in comparsion to other roles. Assists are classified as direct passes made by a player that resulted in a score. When thinking of this definition and the responsibilities of these roles, which all include rebounding the ball, protecting the ball, and guarding other bigger players on the court, the reasoning behind this trend becomes apparent. These positions are in roles where they are responsible with awuiring the ball from the offense and getting it to the scoring positions, which per the definition above is an assist. Meaning that they are more likely to have higher average assists in comparison to other roles.
+
+![](figures/point_ast_dist.png){#fig-asst-dist}
+
+### Takeaways
+
+From this exploratory data analysis, we see that there are no specific trends for each statistics. For example, we can not say that X position will be the best at scoring. However, if we breakdown the statistics in terms of offensive and defensive performances, we begin to see a trend where guarding roles are better at defensive behaviors and shooting positions are better at offensive behaviors. Because of the descriptions for each position, the reasoning becomes intuitive, as explained above, however, because players can be good at many roles and often times have to be flexible with positions based on the trajectories of particular games, we see that regardless of position, all positions can perform sufficiently in both offensive and defensive roles.
+
+## Modeling Methods
+
+Moving on the modeling methods, the formal objective of the modeling process was to develop a model that could predict a player's position based on their average performance for a given season, thus making it a classification prediction problem.
+
+### Data Splitting
+
+The dataset was split into a training and testing subsets using a 80:20 ratio, with 80% of the data being used in the training set. Then, resampling was conducted via V-Fold Cross Validation. In this process, the training data is shuffled and randomly sampled into a specified number of folds for a specified number of times. In this project 5 folds and 3 repeats were used. Meaning the training data was shuffled and resampled 15 times.
+
+### Model Description
+
+The project utilized multinomial-regression, random forest, and k-nearest neighbor models. KNN models looks at patterns in the training data and produces models that mirror the observed patterns. The random forest model is versatile yet very simple. It replicates the human decision making process, while being resistant to outliers. The multinomial regression process utilizes linear methods on the log odds of the outcome variable as a product of the predictor variable, with a penalty that shrinks the coefficients of each predictor variable based on how related it is to the outcome variable. All models were tuned for optimal hyperparameters.
+
+In terms of model tuning, for the random forest model, the mtry and min_n parameters were tuned. M try refers to the number of variables included in the first split of the tree, the range in this case was between 1-8, as it should be roughly 70% of the total number of predictors. Min N refers to the minimum number of data points for each node. The tuning parameter for multinomal logistic regression was explained above. The default range was used. Finally, the k-nearest neighbors tuning parameter was neighbors, which refers to the number of points that are in proximitiy to the point in question.
+
+### Recipes
+
+Based on the findings of the exploratory data analysis described above, three recipes in total were created. The first recipe used was a kitchen sink recipe, which included using all predictor variables, outside of identification and time-series variables. The next recipe utilized the defensive focused predictors, such as blocks, assists, etc. to predict the outcome variable. The final recipe utilized offensive focused predictors, such as average points, average field goal percentages, average three-point percentages, and so on. Interaction terms were used in the offensive and defensive recipes between average minutes played, games played, and rank with defensive and offensive metrics like blocks, points, and assists because there is an obvious relationship between the amount of time a player had in a game and how they performed during that time. These recipes were created separately because it is obvious from the previous sections that certain positions thrive in the offensive realm and other positions are better suited at the defensive realm, therefore certain predictor variables should inherently better at predicting certain positions. It should be noted that all recipes removed a particular statistic, refered to as per, which is a additative measure of all the good things and bad things a player has done during a season. This was removed because it is calculated using the predictor variables, therefore it would be redundant to include this variable. However, a trade-off with these specific recipes is that roughly half the data is offensive roles and half the data is defensive roles, thus the models utilizing these recipes may be really good at predicting only half of the positions.
+
+Because this a multinomial classification problem, the chosen metric for this project was accuracy because that will provide an overall assessment of the model performance, instead of a by-class assesment that would be provided by other classification metrics. Accuracy simply measures how many of the observations were classified correctly, meaning that a higher accuracy is indicative of a better model.
+
+## Model Building & Selection
+
+As mentioned above, accuracy will be used as the comparison metric between models to determine the final model to be fit to the testing dataset. Per the table below, we see that the random forest model using the kitchen sink recipe performed the best out of all of the best fitting models, with an accuracy of roughly 0.60. This means that roughly 60% of the observations were classified to the correct position, meaning that the model performed better than random guessing, as there was a 14% chance of randomly guessing the correct position. As we can see, the optimal mtry and min_n for the best performing random forest model was an mtry of 8 and a min_n of 2. For the k-nearest neighbors model, the optimal number of neighbors for the best performing model was the kitchen sink recipe with 5 neighbors. As for the multinomial regression model, the best performing model was with the kitchen sink recipe using a penalty of 0.3.
+
+```{r}
+#| label: building results table
+kitchen_rf_best <- show_best(tune_rf_kitchen, metric = "accuracy")[1, ]
+scoring_rf_best <- show_best(tune_rf_scoring, metric = "accuracy")[1, ]
+defense_rf_best <- show_best(tune_rf_defense, metric = "accuracy")[1, ]
+kitchen_knn_best <- show_best(tune_knn_kitchen, metric = "accuracy")[1, ]
+scoring_knn_best <- show_best(tune_knn_scoring, metric = "accuracy")[1, ]
+defense_knn_best<- show_best(tune_knn_defense, metric = "accuracy")[1, ]
+kitchen_mreg_best <- show_best(kitchen_mreg_tune, metric = "accuracy")[1, ]
+scoring_mreg_best <- show_best(scoring_mreg_tune, metric = "accuracy")[1, ]
+defense_mreg_best <- show_best(defense_mreg_tune, metric = "accuracy")[1, ]
+
+top_accuracy <- tibble(model = c("RF", "RF", "RF", 
+                                "KNN", "KNN", "KNN",
+                                "MReg", "MReg", "MReg"),
+                      recipe = c("kitchen", "scoring", "defense",
+                                 "kitchen", "scoring", "defense",
+                                 "kitchen", "scoring", "defense"),
+                   accuracy = c(kitchen_rf_best$mean, scoring_rf_best$mean, 
+                            defense_rf_best$mean,
+                            kitchen_knn_best$mean, scoring_knn_best$mean,
+                            defense_knn_best$mean,
+                            kitchen_mreg_best$mean, scoring_mreg_best$mean,
+                            defense_mreg_best$mean),
+                   se = c(kitchen_rf_best$std_err, scoring_rf_best$std_err, 
+                          defense_rf_best$std_err,
+                          kitchen_knn_best$std_err, scoring_knn_best$std_err,
+                          defense_knn_best$std_err,
+                          kitchen_mreg_best$std_err, scoring_mreg_best$std_err,
+                          defense_mreg_best$std_err),
+                   n = c(kitchen_rf_best$n, scoring_rf_best$n, 
+                         defense_rf_best$n,
+                         kitchen_knn_best$n, scoring_knn_best$n,
+                         defense_knn_best$n,
+                         kitchen_mreg_best$n, scoring_mreg_best$n,
+                         defense_mreg_best$n)
+                   )
+
+tuning_params <- tibble(model = c("RF", "RF", "RF", 
+                                  "RF", "RF", "RF", 
+                                  "KNN", "KNN", "KNN",
+                                  "MReg", "MReg", "MReg"),
+                        recipe = c("kitchen", "scoring", "defense",
+                                   "kitchen", "scoring", "defense",
+                                   "kitchen", "scoring", "defense",
+                                   "kitchen", "scoring", "defense"),
+                        accuracy = c(kitchen_rf_best$mean, scoring_rf_best$mean, 
+                                     defense_rf_best$mean,
+                                     kitchen_rf_best$mean, scoring_rf_best$mean, 
+                                     defense_rf_best$mean,
+                                     kitchen_knn_best$mean, scoring_knn_best$mean,
+                                     defense_knn_best$mean,
+                                     kitchen_mreg_best$mean, scoring_mreg_best$mean,
+                                     defense_mreg_best$mean),
+                        
+                       tuning_param = c("mtry", "min_n",
+                                                              "mtry", "min_n",
+                                                             "mtry", "min_n",
+                                                              "neighbors", "neighbors",
+                                                              "neighbors",
+                                                              "penalty",
+                                                              "penalty",
+                                                              "penalty"),
+                       value = c(kitchen_rf_best$mtry, kitchen_rf_best$min_n,
+                                 scoring_rf_best$mtry,  scoring_rf_best$min_n,
+                                defense_rf_best$mtry, defense_rf_best$min_n,
+                                 kitchen_knn_best$neighbors, scoring_knn_best$neighbors,
+                                defense_knn_best$neighbors,
+                                kitchen_mreg_best$penalty, scoring_mreg_best$penalty,
+                               defense_mreg_best$penalty)
+)
+
+value = c(kitchen_rf_best$mtry, kitchen_rf_best$min_n,
+          scoring_rf_best$mtry,  scoring_rf_best$min_n,
+          defense_rf_best$mtry, defense_rf_best$min_n,
+          kitchen_knn_best$neighbors, scoring_knn_best$neighbors,
+          defense_knn_best$neighbors,
+          kitchen_mreg_best$penalty, scoring_mreg_best$penalty,
+          defense_mreg_best$penalty)
+
+tuning_params %>% 
+  kableExtra::kable(title = "Best Models Based on Accuracy")
+```
+
+Based on these results, further tuning should definitely be explored, as the models have significant room for improvement. In the future, tuning should be expanded to a more specific, wider ranger. However, in addition to tuning, more data wrangling and subsetting should occur within the recipe building process. In the previous section, it was hinted that the specific recipes may not perform very well because of certain positions being better at certain offensive and defensive skills. Thus, the models that specified these skills as predictors would inherently not be great at predicting the other positions. In the future, in addition to more specified tuning, there should be a filtering step within the recipe to filter out the observations that do not align with the position type (i.e offensive or defensive positions). This may lead to the development of completely separate models,in which the tuning process would have to be revisited completely. However, the results were not surprising, as the kitchen sink recipe contained all possible predictors, thus making it more versatile in being able to predict both offensive and defensive roles accordingly. Furthermore, tree-based models because they mirror human decision and are resistant to outliers, would know how to navigate potential extreme values, therefore making its performance not shocking at all.
+
+Per these results, the final model will be fitted using a random forest model with an mtry value of 8 and an min_n value of 2, with the kitchen sink recipe.
+
+## Final Model Analysis
+
+Because of this being a multinomial classification model, the only metric to evaluate the entire model performance is accuracy, as outlined above. After fitting the model outlined above to the testing data, it yielded an accuracy of 0.636, which indicates that roughly 63.6% of the observations were classified correctly. This can also be seen in @fig-final-fit. The final model still performed much better than random guessing, however, there is room for improvement, as roughly almost 38% of the observations were misclassfied. Based on the results, the model is good as it performs better than random guessing, however, the kitchen sink recipe being used help make the model more dynamic is assigning both offensive and defensive position types. While the kitchen sink model did not implement much feature engineering, for the sake of this project, flexibility was prioritized of specificity because it is more beneficial to have a model that can tackle any position type in real-world scenarios like scouting. Whereas, a more specific model may be valued in a coaching setting.
+
+![](figures/final_fit.png){#fig-final-fit}
+
+## Conclusions
+
+In conclusion, it can be stated that certain positions perform better in offensive or defensive statistics, in comparison to saying that they perform better at one particular statistic. Because of this, model building to predict position can be rather challenging because it becomes a tradeoff between having a more diverse model that can handle both position types, but performs not as well. Or you can have a specific models that predicts each position type, which will perform well but be computational expensive and complex.
+
+When thinking of the insights derived from this process, a future exploration of this work could be developing individual models for each position that take in a player's average statistics and predict if that position is a proper fit for the player.
+
+In addition to the exploration above, perhaps the inclusion of physical measurements in the model building process could be beneficial, as certain positions are better suited for players of a certain stature.
+
+## References
+
+“NBA Statistics”, (2001-2022), https://www.espn.com/nba/stats.
+
+## Appendix: Tuning
+
+![](figures/knn_tune.png)
+
+From this figure, it is shown that the number of neighbors remain static until reaching the optimal number of five, then, it follows a relatively downward accuracy trend as the number of neighbors increases. There are moments of increased accuracy, but nowhere near the prime value.
+
+![](figures/rf_tune.png)
+From this figure, it is shown that the minimal node size is cruical in improving the performance of the model, as the trend for the mtry value remains the same for each node size parameter. From this plot, it can be determined that as the node size decreased, the accuracy of the model increased.
+
+![](figures/mreg_tune.png)
+
+From this figure it is shown that there are no real general trends in terms of accuracy and the size of the penalty. There are moments of increase and decrease.
